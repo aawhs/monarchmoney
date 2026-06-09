@@ -9,7 +9,7 @@ from datetime import datetime, date, timedelta
 from typing import Any, Dict, List, Optional, Union
 
 import oathtool
-from aiohttp import ClientSession, FormData
+from aiohttp import ClientSession, CookieJar, FormData
 from aiohttp.client import DEFAULT_TIMEOUT
 from gql import Client, gql
 from gql.transport.aiohttp import AIOHTTPTransport
@@ -23,19 +23,19 @@ SESSION_DIR = ".mm"
 SESSION_FILE = f"{SESSION_DIR}/mm_session.pickle"
 
 
-class MonarchMoneyEndpoints(object):
-    BASE_URL = "https://api.monarchmoney.com"
+class MonarchMoneyEndpoints:
+    BASE_URL = "https://api.monarch.com"
 
     @classmethod
-    def getLoginEndpoint(cls) -> str:
-        return cls.BASE_URL + "/auth/login/"
+    def getLoginEndpoint(cls):
+        return cls.BASE_URL + "/auth/web/login/"
 
     @classmethod
-    def getGraphQL(cls) -> str:
+    def getGraphQLEndpoint(cls):
         return cls.BASE_URL + "/graphql"
 
     @classmethod
-    def getAccountBalanceHistoryUploadEndpoint(cls) -> str:
+    def getUploadBalanceHistoryEndpoint(cls):
         return cls.BASE_URL + "/account-balance-history/upload/"
 
 
@@ -1128,187 +1128,153 @@ class MonarchMoney(object):
         :param end_date:
             the latest date to get budget data, in "yyyy-mm-dd" format (default: next month)
         :param use_legacy_goals:
-            Inoperative (plan to remove)
+            Set True to return a list of monthly budget set aside for goals (default: no list)
         :param use_v2_goals:
-            Inoperative (paln to remove)
+            Set True to return a list of monthly budget set aside for version 2 goals (default list)
         """
         query = gql(
             """
-            query Common_GetJointPlanningData($startDate: Date!, $endDate: Date!) {
-              budgetSystem
-              budgetData(startMonth: $startDate, endMonth: $endDate) {
-                ...BudgetDataFields
-                __typename
-              }
-              categoryGroups {
-                ...BudgetCategoryGroupFields
-                __typename
-              }
-              goalsV2 {
-                ...BudgetDataGoalsV2Fields
-                __typename
-              }
-            }
-            
-            fragment BudgetDataMonthlyAmountsFields on BudgetMonthlyAmounts {
-              month
-              plannedCashFlowAmount
-              plannedSetAsideAmount
-              actualAmount
-              remainingAmount
-              previousMonthRolloverAmount
-              rolloverType
-              cumulativeActualAmount
-              rolloverTargetAmount
-              __typename
-            }
-            
-            fragment BudgetMonthlyAmountsByCategoryFields on BudgetCategoryMonthlyAmounts {
-              category {
-                id
-                __typename
-              }
-              monthlyAmounts {
-                ...BudgetDataMonthlyAmountsFields
-                __typename
-              }
-              __typename
-            }
-            
-            fragment BudgetMonthlyAmountsByCategoryGroupFields on BudgetCategoryGroupMonthlyAmounts {
-              categoryGroup {
-                id
-                __typename
-              }
-              monthlyAmounts {
-                ...BudgetDataMonthlyAmountsFields
-                __typename
-              }
-              __typename
-            }
-            
-            fragment BudgetMonthlyAmountsForFlexExpenseFields on BudgetFlexMonthlyAmounts {
-              budgetVariability
-              monthlyAmounts {
-                ...BudgetDataMonthlyAmountsFields
-                __typename
-              }
-              __typename
-            }
-            
-            fragment BudgetDataTotalsByMonthFields on BudgetTotals {
-              actualAmount
-              plannedAmount
-              previousMonthRolloverAmount
-              remainingAmount
-              __typename
-            }
-            
-            fragment BudgetTotalsByMonthFields on BudgetMonthTotals {
-              month
-              totalIncome {
-                ...BudgetDataTotalsByMonthFields
-                __typename
-              }
-              totalExpenses {
-                ...BudgetDataTotalsByMonthFields
-                __typename
-              }
-              totalFixedExpenses {
-                ...BudgetDataTotalsByMonthFields
-                __typename
-              }
-              totalNonMonthlyExpenses {
-                ...BudgetDataTotalsByMonthFields
-                __typename
-              }
-              totalFlexibleExpenses {
-                ...BudgetDataTotalsByMonthFields
-                __typename
-              }
-              __typename
-            }
-            
-            fragment BudgetRolloverPeriodFields on BudgetRolloverPeriod {
-              id
-              startMonth
-              endMonth
-              startingBalance
-              targetAmount
-              frequency
-              type
-              __typename
-            }
-            
-            fragment BudgetCategoryFields on Category {
-              id
-              name
-              icon
-              order
-              budgetVariability
-              excludeFromBudget
-              isSystemCategory
-              updatedAt
-              group {
-                id
-                type
-                budgetVariability
-                groupLevelBudgetingEnabled
-                __typename
-              }
-              rolloverPeriod {
-                ...BudgetRolloverPeriodFields
-                __typename
-              }
-              __typename
-            }
-            
-            fragment BudgetDataFields on BudgetData {
+          query GetJointPlanningData($startDate: Date!, $endDate: Date!, $useLegacyGoals: Boolean!, $useV2Goals: Boolean!) {
+            budgetData(startMonth: $startDate, endMonth: $endDate) {
               monthlyAmountsByCategory {
-                ...BudgetMonthlyAmountsByCategoryFields
+                category {
+                  id
+                  __typename
+                }
+                monthlyAmounts {
+                  month
+                  plannedCashFlowAmount
+                  plannedSetAsideAmount
+                  actualAmount
+                  remainingAmount
+                  previousMonthRolloverAmount
+                  rolloverType
+                  __typename
+                }
                 __typename
               }
               monthlyAmountsByCategoryGroup {
-                ...BudgetMonthlyAmountsByCategoryGroupFields
+                categoryGroup {
+                  id
+                  __typename
+                }
+                monthlyAmounts {
+                  month
+                  plannedCashFlowAmount
+                  actualAmount
+                  remainingAmount
+                  previousMonthRolloverAmount
+                  rolloverType
+                  __typename
+                }
                 __typename
               }
               monthlyAmountsForFlexExpense {
-                ...BudgetMonthlyAmountsForFlexExpenseFields
+                budgetVariability
+                monthlyAmounts {
+                  month
+                  plannedCashFlowAmount
+                  actualAmount
+                  remainingAmount
+                  previousMonthRolloverAmount
+                  rolloverType
+                  __typename
+                }
                 __typename
               }
               totalsByMonth {
-                ...BudgetTotalsByMonthFields
+                month
+                totalIncome {
+                  plannedAmount
+                  actualAmount
+                  remainingAmount
+                  previousMonthRolloverAmount
+                  __typename
+                }
+                totalExpenses {
+                  plannedAmount
+                  actualAmount
+                  remainingAmount
+                  previousMonthRolloverAmount
+                  __typename
+                }
+                totalFixedExpenses {
+                  plannedAmount
+                  actualAmount
+                  remainingAmount
+                  previousMonthRolloverAmount
+                  __typename
+                }
+                totalNonMonthlyExpenses {
+                  plannedAmount
+                  actualAmount
+                  remainingAmount
+                  previousMonthRolloverAmount
+                  __typename
+                }
+                totalFlexibleExpenses {
+                  plannedAmount
+                  actualAmount
+                  remainingAmount
+                  previousMonthRolloverAmount
+                  __typename
+                }
                 __typename
               }
               __typename
             }
-            
-            fragment BudgetCategoryGroupFields on CategoryGroup {
+            categoryGroups {
               id
               name
               order
-              type
-              budgetVariability
-              updatedAt
               groupLevelBudgetingEnabled
-              categories {
-                ...BudgetCategoryFields
-                __typename
-              }
+              budgetVariability
               rolloverPeriod {
                 id
-                type
                 startMonth
                 endMonth
-                startingBalance
-                frequency
-                targetAmount
+                __typename
+              }
+              categories {
+                id
+                name
+                order
+                budgetVariability
+                rolloverPeriod {
+                  id
+                  startMonth
+                  endMonth
+                  __typename
+                }
+                __typename
+              }
+              type
+              __typename
+            }
+            goals @include(if: $useLegacyGoals) {
+              id
+              name
+              completedAt
+              targetDate
+              __typename
+            }
+            goalMonthlyContributions(startDate: $startDate, endDate: $endDate) @include(if: $useLegacyGoals) {
+              mount: monthlyContribution
+              startDate
+              goalId
+              __typename
+            }
+            goalPlannedContributions(startDate: $startDate, endDate: $endDate) @include(if: $useLegacyGoals) {
+              id
+              amount
+              startDate
+              goal {
+                id
                 __typename
               }
               __typename
             }
-            
-            fragment BudgetDataGoalsV2Fields on GoalV2 {
+            goalsV2 @include(if: $useV2Goals) {
               id
               name
               archivedAt
@@ -1328,13 +1294,17 @@ class MonarchMoney(object):
                 __typename
               }
               __typename
-            }            
-            """
+            }
+            budgetSystem
+          }
+        """
         )
 
         variables = {
             "startDate": start_date,
             "endDate": end_date,
+            "useLegacyGoals": use_legacy_goals,
+            "useV2Goals": use_v2_goals,
         }
 
         if not start_date and not end_date:
@@ -1369,7 +1339,7 @@ class MonarchMoney(object):
             )
 
         return await self.gql_call(
-            operation="Common_GetJointPlanningData",
+            operation="GetJointPlanningData",
             graphql_query=query,
             variables=variables,
         )
@@ -2691,7 +2661,7 @@ class MonarchMoney(object):
 
         async with ClientSession(headers=self._headers) as session:
             resp = await session.post(
-                MonarchMoneyEndpoints.getAccountBalanceHistoryUploadEndpoint(),
+                MonarchMoneyEndpoints.getUploadBalanceHistoryEndpoint(),
                 json=form,
             )
             if resp.status != 200:
@@ -2796,7 +2766,7 @@ class MonarchMoney(object):
         Makes a GraphQL call to Monarch Money's API.
         """
         return await self._get_graphql_client().execute_async(
-            request=graphql_query, variable_values=variables, operation_name=operation
+            document=graphql_query, operation_name=operation, variable_values=variables
         )
 
     def save_session(self, filename: Optional[str] = None) -> None:
@@ -2851,9 +2821,24 @@ class MonarchMoney(object):
         if mfa_secret_key:
             data["totp"] = oathtool.generate_otp(mfa_secret_key)
 
-        async with ClientSession(headers=self._headers) as session:
+        jar = CookieJar()
+        async with ClientSession(headers=self._headers, cookie_jar=jar) as session:
+            # Step 1: Get CSRF token
+            async with session.get(MonarchMoneyEndpoints.BASE_URL + "/auth/csrf/"):
+                pass
+            # Extract CSRF token from cookies
+            csrf_token = None
+            for cookie in jar:
+                if cookie.key == "csrftoken":
+                    csrf_token = cookie.value
+                    break
+
+            # Step 2: Login with CSRF header
+            headers = self._headers.copy()
+            if csrf_token:
+                headers["X-CSRFToken"] = csrf_token
             async with session.post(
-                MonarchMoneyEndpoints.getLoginEndpoint(), json=data
+                MonarchMoneyEndpoints.getLoginEndpoint(), json=data, headers=headers
             ) as resp:
                 if resp.status == 403:
                     raise RequireMFAException("Multi-Factor Auth Required")
@@ -2880,9 +2865,24 @@ class MonarchMoney(object):
             "username": email,
         }
 
-        async with ClientSession(headers=self._headers) as session:
+        jar = CookieJar()
+        async with ClientSession(headers=self._headers, cookie_jar=jar) as session:
+            # Step 1: Get CSRF token
+            async with session.get(MonarchMoneyEndpoints.BASE_URL + "/auth/csrf/"):
+                pass
+            # Extract CSRF token from cookies
+            csrf_token = None
+            for cookie in jar:
+                if cookie.key == "csrftoken":
+                    csrf_token = cookie.value
+                    break
+
+            # Step 2: MFA login with CSRF header
+            headers = self._headers.copy()
+            if csrf_token:
+                headers["X-CSRFToken"] = csrf_token
             async with session.post(
-                MonarchMoneyEndpoints.getLoginEndpoint(), json=data
+                MonarchMoneyEndpoints.getLoginEndpoint(), json=data, headers=headers
             ) as resp:
                 if resp.status != 200:
                     try:
@@ -2912,7 +2912,7 @@ class MonarchMoney(object):
                 "Make sure you call login() first or provide a session token!"
             )
         transport = AIOHTTPTransport(
-            url=MonarchMoneyEndpoints.getGraphQL(),
+            url=MonarchMoneyEndpoints.getGraphQLEndpoint(),
             headers=self._headers,
             timeout=self._timeout,
         )
