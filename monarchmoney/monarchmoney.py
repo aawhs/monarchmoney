@@ -59,10 +59,12 @@ class MonarchMoney(object):
         token: Optional[str] = None,
     ) -> None:
         self._headers = {
-            "Accept": "application/json",
+            "Accept": "application/json, text/plain, */*",
             "Client-Platform": "web",
             "Content-Type": "application/json",
-            "User-Agent": "MonarchMoneyAPI (https://github.com/hammem/monarchmoney)",
+            "Origin": "https://app.monarch.com",
+            "Referer": "https://app.monarch.com/login",
+            "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
         }
         if token:
             self._headers["Authorization"] = f"Token {token}"
@@ -2840,14 +2842,15 @@ class MonarchMoney(object):
             async with session.post(
                 MonarchMoneyEndpoints.getLoginEndpoint(), json=data, headers=headers
             ) as resp:
+                response = await resp.json()
                 if resp.status == 403:
                     raise RequireMFAException("Multi-Factor Auth Required")
                 elif resp.status != 200:
+                    detail = response.get("detail", response.get("error_code", resp.reason))
                     raise LoginFailedException(
-                        f"HTTP Code {resp.status}: {resp.reason}"
+                        f"HTTP Code {resp.status}: {detail}"
                     )
 
-                response = await resp.json()
                 self.set_token(response["token"])
                 self._headers["Authorization"] = f"Token {self._token}"
 
